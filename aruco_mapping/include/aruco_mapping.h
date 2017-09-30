@@ -29,7 +29,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
-/* Author: Jan Bacik */
+/* Author: Jan Bacik 
+ * Editted by Matthew Wilson
+ * * */
 
 #ifndef ARUCO_MAPPING_H
 #define ARUCO_MAPPING_H
@@ -126,14 +128,17 @@ private:
   int  roi_y_;                                      
   int  roi_w_;                                     
   int  roi_h_;     
+  // Should we show the detections in an OpenCV window (answer: no)
   bool gui_;
-  int left_id_;
-  int middle_id_;
-  int right_id_;
+  // List of all markers in array 
+  std::vector<int> marker_id_list_;
+  // The distance from tag center to tag center
   float tag_offset_;
+  // offsets from 0, 0 that the markers are at
   float cartx_;
   float carty_;
   float cartz_;
+  // rotation that the markers are at
   float roll_;
   float pitch_;
   float yaw_;

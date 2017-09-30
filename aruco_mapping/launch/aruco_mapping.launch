@@ -1,19 +1,17 @@
 <?xml version="1.0"?>
 <launch> 
 
-  <!-- RVIZ -->
-  <!--
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aruco_mapping)/launch/aruco_config.rviz" />
-  -->
-
   <arg name="gui" default="0"/>
 
   <!-- ArUco mapping -->
   <node pkg="aruco_mapping" type="aruco_mapping" name="aruco_mapping" output="screen">
+	<!--
+	<remap from="/image_raw" to="/usb_cam/image_raw"/>
+	-->
 	<remap from="/image_raw" to="/zed/camera/left/image_raw"/>
 
     <param name="calibration_file" type="string" value="$(find aruco_mapping)/data/zed.ini" /> 
-	<!-- Never have more than num markers, or it will crash -->
+	<!-- NEVER HAVE MORE THAN NUM MARKERS, OR IT WILL CRASH -->
     <param name="num_of_markers" type="int" value="10" />
     <param name="marker_size" type="double" value="0.268"/>
     <param name="space_type" type="string" value="plane" />
@@ -23,12 +21,8 @@
     <param name="roi_width" type="int" value="1280" /> 
     <param name="roi_height" type="int" value="720" /> 
     <param name="gui" type="bool" value="$(arg gui)" />
-
-	<!-- ArUco tag ids  -->
-    <param name="left_id" type="int" value="85"/>
-    <param name="middle_id" type="int" value="83"/>
-    <param name="right_id" type="int" value="82"/>
-
+	<!-- Left (85 (ascii U)),  Middle (83 (ascii S)),  Right (82 (ascii R))-->
+	<rosparam param="marker_id_list">[85, 83, 82]</rosparam>
     <param name="tag_offset" type="double" value="0.48"/>
 
 	<!-- Collector bin cartesian coordinates -->
@@ -36,9 +30,11 @@
     <param name="carty" type="double" value="0.0"/>
     <param name="cartz" type="double" value="0.3"/>
 
-    <param name="roll" type="double" value="-1.5708"/>
+
+	<!-- These rotate the frames along the correct axes -->
+    <param name="roll" type="double" value="1.5708"/>
     <param name="pitch" type="double" value="-1.5708"/>
-    <param name="yaw" type="double" value="0.0"/>
+    <param name="yaw" type="double" value="-1.5708"/>
     <!-- Quaternion angle offset -->
 	<!--
     <param name="pitch" type="double" value="1.5708"/>
@@ -47,6 +43,17 @@
     <param name="quatz" type="double" value="0.0"/>
     <param name="quatw" type="double" value="0.707"/>
 	-->
-
   </node>  
+
+
+  <!--
+  <include file="$(find aruco_mapping)/launch/aruco_patch.launch" />
+  -->
+
+
+  <!-- RVIZ -->
+  <!--
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aruco_mapping)/launch/aruco_config.rviz" />
+  -->
+
 </launch>

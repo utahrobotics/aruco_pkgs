@@ -29,7 +29,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
-/* Author: Jan Bacik */
+/* Author: Jan Bacik 
+ * Editted by Matthew Wilson
+ * * */
 
 #ifndef ARUCO_MAPPING_CPP
 #define ARUCO_MAPPING_CPP
@@ -65,9 +67,7 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
   nh->getParam("/aruco_mapping/roi_w",roi_w_);
   nh->getParam("/aruco_mapping/roi_h",roi_h_);
   nh->getParam("/aruco_mapping/gui",gui_);
-  nh->getParam("/aruco_mapping/left_id",left_id_);
-  nh->getParam("/aruco_mapping/middle_id",middle_id_);
-  nh->getParam("/aruco_mapping/right_id",right_id_);
+  nh->getParam("/aruco_mapping/marker_id_list",marker_id_list_);
   nh->getParam("/aruco_mapping/tag_offset",tag_offset_);
   nh->getParam("/aruco_mapping/cartx",cartx_);
   nh->getParam("/aruco_mapping/carty",carty_);
@@ -97,10 +97,10 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
     ROS_INFO_STREAM("ROI width: "  << roi_w_);
     ROS_INFO_STREAM("ROI height: " << roi_h_);      
     ROS_INFO_STREAM("GUI: " << gui_);
-    ROS_INFO_STREAM("Left Marker ID: " << left_id_);
-    ROS_INFO_STREAM("Middle Marker ID: " << middle_id_);
-    ROS_INFO_STREAM("Right Marker ID: " << right_id_);
-    ROS_INFO_STREAM("Tag offset: " << tag_offset_);
+	for(std::vector<int>::size_type i = 0; i != marker_id_list_.size(); i++) {
+	  ROS_INFO_STREAM("#" << i+1 <<  " Marker ID: " << marker_id_list_[i]);
+	}
+    ROS_INFO_STREAM("Tag spacing: " << tag_offset_);
   }
     
   //ROS publishers
@@ -249,24 +249,36 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
 
     ROS_DEBUG_STREAM("The lowest Id marker " << lowest_marker_id_ );
 
-    // Handle the offset in case the middle tag is not seen first
-    if (lowest_marker_id_ == middle_id_) {
-      carty_ = carty_;
-    }
-    else if (lowest_marker_id_ == left_id_) {
-      carty_ = carty_ + tag_offset_;
-    }
-    else if (lowest_marker_id_ == right_id_) {
-      carty_ = carty_ - tag_offset_;
-    }
+	// <patch>
 
+	// The first marker we see is set as the origin. So depending on which 
+	// one we see first, we have to adjust for its actual position
+	int marker_count = marker_id_list_.size();
+	int list_middle = marker_count / 2;
+	bool is_odd = marker_count % 2 == 1;
+	double list_middle_f = list_middle - 0.5;
 
-	// Convert the roll, pitch, yaw to a quaternion
+	int j = 0;
+	for(std::vector<int>::size_type i = 0; i != marker_count; i++) {
+		if (lowest_marker_id_ == marker_id_list_[i]) {
+		  if (is_odd) {
+		    carty_ = carty_ - tag_offset_ * (list_middle - j);
+		  }
+		  else {
+		    carty_ = carty_ - tag_offset_ * (list_middle_f - j);
+		  }
+
+		  }
+		j++;
+	}
+
+	// Create quat from passed in rpy
+	// This is used to rotate the camera frame to standard ros frame
+	// (x is out, instead of z, etc)
 	tf::Matrix3x3 rpy_mat;
 	rpy_mat.setEulerYPR(yaw_, pitch_, roll_);
 	tf::Quaternion quat;
 	rpy_mat.getRotation(quat);
-
 
     // Identify lowest marker ID with map's origin
     markers_[0].marker_id = lowest_marker_id_;
@@ -301,6 +313,8 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
     rotation.setY(quat.getY());
     rotation.setZ(quat.getZ());
     rotation.setW(quat.getW());
+
+	// </patch>
 
     markers_[0].tf_to_previous.setOrigin(position);
     markers_[0].tf_to_previous.setRotation(rotation);
@@ -445,6 +459,13 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
        // Generating TFs for listener
        for(char k = 0; k < 10; k++)
        {
+		 //tf::Transform cam_tf(markers_[last_marker_id].current_camera_tf);
+		 //tf::Quaternion quat(0.0, -1.5708, 0.0);
+		 //cam_tf.setRotation(cam_tf.getRotation() * quat);
+
+         // TF from old marker and its camera
+         //broadcaster_.sendTransform(tf::StampedTransform(cam_tf, ros::Time::now(), marker_tf_id_old.str(),camera_tf_id_old.str()));
+
          // TF from old marker and its camera
          broadcaster_.sendTransform(tf::StampedTransform(markers_[last_marker_id].current_camera_tf,ros::Time::now(),
                                                          marker_tf_id_old.str(),camera_tf_id_old.str()));
@@ -509,9 +530,9 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
 
         // Invert and position of new marker to compute camera pose above it
         markers_[index].current_camera_tf = markers_[index].current_camera_tf.inverse();
-		tf::Quaternion inverse_quat;
-		inverse_quat.setRPY(0.0, 0.0, 0.0);
-		markers_[index].current_camera_tf.setRotation(inverse_quat);
+		//tf::Quaternion inverse_quat;
+		//inverse_quat.setRPY(0.0, 0.0, 0.0);
+		//markers_[index].current_camera_tf.setRotation(inverse_quat);
 
         marker_origin = markers_[index].current_camera_tf.getOrigin();
         markers_[index].current_camera_pose.position.x = marker_origin.getX();
@@ -697,8 +718,13 @@ ArucoMapping::publishTfs(bool map_option)
     marker_tf_id << "marker_" << i;
     // Older marker - or World
     std::stringstream marker_tf_id_old;
-    if(i == 0)
+    if(i == 0) {
       marker_tf_id_old << "map";
+	  //tf::Quaternion inverse_quat;
+	  //inverse_quat.setRPY(0.0, 0.0, 0.0);
+	  //markers_[0].tf_to_previous.setRotation(inverse_quat);
+	}
+
     else
       marker_tf_id_old << "marker_" << markers_[i].previous_marker_id;
 
@@ -712,7 +738,11 @@ ArucoMapping::publishTfs(bool map_option)
 
 	//markers_[i].current_camera_tf.setRotation(inverse_quat);
 
-    broadcaster_.sendTransform(tf::StampedTransform(markers_[i].current_camera_tf,ros::Time::now(),marker_tf_id.str(),camera_tf_id.str()));
+	// <patch>
+	//if (markers_[i].visible) {
+		broadcaster_.sendTransform(tf::StampedTransform(markers_[i].current_camera_tf,ros::Time::now(),marker_tf_id.str(),camera_tf_id.str()));
+	//}
+	// </patch>
 
     if(map_option == true)
     {
