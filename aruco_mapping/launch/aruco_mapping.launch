@@ -10,7 +10,7 @@
 	-->
 	<remap from="/image_raw" to="/zed/camera/left/image_raw"/>
 
-    <param name="calibration_file" type="string" value="$(find aruco_mapping)/data/zed.ini" /> 
+    <param name="calibration_file" type="string" value="$(find aruco_mapping)/data/sim.ini" /> 
 	<!-- NEVER HAVE MORE THAN NUM MARKERS, OR IT WILL CRASH -->
     <param name="num_of_markers" type="int" value="10" />
     <param name="marker_size" type="double" value="0.268"/>
@@ -32,9 +32,10 @@
 
 
 	<!-- These rotate the frames along the correct axes -->
-    <param name="roll" type="double" value="1.5708"/>
+    <param name="roll" type="double" value="-1.5708"/>
     <param name="pitch" type="double" value="-1.5708"/>
     <param name="yaw" type="double" value="-1.5708"/>
+
     <!-- Quaternion angle offset -->
 	<!--
     <param name="pitch" type="double" value="1.5708"/>

@@ -739,9 +739,9 @@ ArucoMapping::publishTfs(bool map_option)
 	//markers_[i].current_camera_tf.setRotation(inverse_quat);
 
 	// <patch>
-	//if (markers_[i].visible) {
+	if (markers_[i].visible) {
 		broadcaster_.sendTransform(tf::StampedTransform(markers_[i].current_camera_tf,ros::Time::now(),marker_tf_id.str(),camera_tf_id.str()));
-	//}
+	}
 	// </patch>
 
     if(map_option == true)
