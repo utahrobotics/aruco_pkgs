@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch> 
 
+  <!-- This is useless now.  I just modified the aruco_mapping node -->
   <node pkg="aruco_mapping" type="aruco_patch.py" name="aruco_patch" output="screen">
 	<!--
 	<rosparam param="marker_id_list">[85, 83, 82]</rosparam>

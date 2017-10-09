@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************************************************************/
 
 /* Author: Jan Bacik 
- * Editted by Matthew Wilson
+ * Editted by Matthew Wilson (<patch> tags around what I changed)
  * * */
 
 #ifndef ARUCO_MAPPING_CPP
@@ -56,6 +56,8 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
 {
   double temp_marker_size;  
   
+  map_odom_tf_set_ = false; // we don't know this tf yet
+
   //Parse params from launch file 
   nh->getParam("/aruco_mapping/calibration_file", calib_filename_);
   nh->getParam("/aruco_mapping/marker_size", temp_marker_size); 
@@ -67,6 +69,7 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
   nh->getParam("/aruco_mapping/roi_w",roi_w_);
   nh->getParam("/aruco_mapping/roi_h",roi_h_);
   nh->getParam("/aruco_mapping/gui",gui_);
+  nh->getParam("/aruco_mapping/two_d_mode",two_d_mode_);
   nh->getParam("/aruco_mapping/marker_id_list",marker_id_list_);
   nh->getParam("/aruco_mapping/tag_offset",tag_offset_);
   nh->getParam("/aruco_mapping/cartx",cartx_);
@@ -75,6 +78,7 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
   nh->getParam("/aruco_mapping/roll",roll_);
   nh->getParam("/aruco_mapping/pitch",pitch_);
   nh->getParam("/aruco_mapping/yaw",yaw_);
+  nh->getParam("/aruco_mapping/tf_delay",tf_delay_);
   //nh->getParam("/aruco_mapping/quatx",quatx_);
   //nh->getParam("/aruco_mapping/quaty",quaty_);
   //nh->getParam("/aruco_mapping/quatz",quatz_);
@@ -390,9 +394,6 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
     {
       markers_[index].current_camera_tf = arucoMarker2Tf(temp_markers[i]);
       markers_[index].current_camera_tf = markers_[index].current_camera_tf.inverse();
-	  //tf::Quaternion inverse_quat;
-	  //inverse_quat.setRPY(0.0, 0.0, 0.0);
-	  //markers_[index].current_camera_tf.setRotation(inverse_quat);
 
       const tf::Vector3 marker_origin = markers_[index].current_camera_tf.getOrigin();
       markers_[index].current_camera_pose.position.x = marker_origin.getX();
@@ -530,9 +531,6 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
 
         // Invert and position of new marker to compute camera pose above it
         markers_[index].current_camera_tf = markers_[index].current_camera_tf.inverse();
-		//tf::Quaternion inverse_quat;
-		//inverse_quat.setRPY(0.0, 0.0, 0.0);
-		//markers_[index].current_camera_tf.setRotation(inverse_quat);
 
         marker_origin = markers_[index].current_camera_tf.getOrigin();
         markers_[index].current_camera_pose.position.x = marker_origin.getX();
@@ -704,13 +702,55 @@ ArucoMapping::processImage(cv::Mat input_image,cv::Mat output_image)
   return true;
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+tf::Transform ArucoMapping::averageTF(std::vector<std::string> frame_vec) {
+  int n = 0;
+  double tx_sum = 0.0;
+  double ty_sum = 0.0;
+  double tz_sum = 0.0;
+  double qx_sum = 0.0;
+  double qy_sum = 0.0;
+  double qz_sum = 0.0;
+  double qw_sum = 0.0;
+
+  tf::Quaternion avg_quat(0, 0, 0, 0);
+
+  for (std::vector<std::string>::iterator it = frame_vec.begin(); it != frame_vec.end(); it++) {
+
+    tf::StampedTransform transform;
+    ros::Time now = ros::Time::now() -  ros::Duration(tf_delay_);
+    //listener_->waitForTransform(*it, "map", now, ros::Duration(0.2));
+    listener_->lookupTransform(*it, "map", now, transform);
+
+	tf::Vector3 trans = transform.getOrigin();
+	tf::Quaternion quat = transform.getRotation();
+	tx_sum += trans.getX();
+	ty_sum += trans.getY();
+	tz_sum += trans.getZ();
+
+	// += just adds the x,y,z,w components 
+	avg_quat += quat;
+ 
+	n++;
+  }
+
+  tf::Vector3 avg_trans(tx_sum/n, ty_sum/n, tz_sum/n);
+
+  avg_quat /= n;
+  avg_quat.normalize();
+
+  return tf::Transform(avg_quat, avg_trans);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 void
 ArucoMapping::publishTfs(bool map_option)
 {
-  tf::Quaternion inverse_quat;
-  inverse_quat.setRPY(0.0, 0.0, 0.0);
+  std::vector<std::string> visible_camera_patch_ids;
+
   for(int i = 0; i < marker_counter_; i++)
   {
     // Actual Marker
@@ -720,15 +760,11 @@ ArucoMapping::publishTfs(bool map_option)
     std::stringstream marker_tf_id_old;
     if(i == 0) {
       marker_tf_id_old << "map";
-	  //tf::Quaternion inverse_quat;
-	  //inverse_quat.setRPY(0.0, 0.0, 0.0);
-	  //markers_[0].tf_to_previous.setRotation(inverse_quat);
 	}
 
     else
       marker_tf_id_old << "marker_" << markers_[i].previous_marker_id;
 
-	//markers_[i].tf_to_previous.setRotation(inverse_quat);
 
     broadcaster_.sendTransform(tf::StampedTransform(markers_[i].tf_to_previous,ros::Time::now(),marker_tf_id_old.str(),marker_tf_id.str()));
 
@@ -736,12 +772,27 @@ ArucoMapping::publishTfs(bool map_option)
     std::stringstream camera_tf_id;
     camera_tf_id << "camera_" << i;
 
-	//markers_[i].current_camera_tf.setRotation(inverse_quat);
-
 	// <patch>
+    std::stringstream camera_patch_id;
+    camera_patch_id << "camera_patch_" << i;
+
+
 	if (markers_[i].visible) {
 		broadcaster_.sendTransform(tf::StampedTransform(markers_[i].current_camera_tf,ros::Time::now(),marker_tf_id.str(),camera_tf_id.str()));
+
+		tf::Transform current_patch_tf(markers_[i].current_camera_tf);
+		tf::Quaternion og_quat = current_patch_tf.getRotation();
+		tf::Quaternion rot_quat;
+
+		// Magic number. Not sure why, probably have an axis flipped
+		rot_quat.setRPY(3.1415, pitch_, yaw_); 
+		current_patch_tf.setRotation((og_quat * rot_quat).normalized());
+
+		broadcaster_.sendTransform(tf::StampedTransform(current_patch_tf,ros::Time::now(),marker_tf_id.str(),camera_patch_id.str()));
+
+		visible_camera_patch_ids.push_back(camera_patch_id.str());
 	}
+
 	// </patch>
 
     if(map_option == true)
@@ -750,7 +801,6 @@ ArucoMapping::publishTfs(bool map_option)
       std::stringstream marker_globe;
       marker_globe << "marker_globe_" << i;
 
-	  //markers_[i].tf_to_map.setRotation(inverse_quat);
 
       broadcaster_.sendTransform(tf::StampedTransform(markers_[i].tf_to_map,ros::Time::now(),"map",marker_globe.str()));
     }
@@ -761,10 +811,61 @@ ArucoMapping::publishTfs(bool map_option)
 
   // Global Position of object
   if(map_option == true) {
-	//map_position_transform_.setRotation(inverse_quat);
-
     broadcaster_.sendTransform(tf::StampedTransform(map_position_transform_,ros::Time::now(),"map","camera_position"));
   }
+
+  // <patch>
+
+  // TODO: might consider adding cov
+
+  if (visible_camera_patch_ids.size() > 0) {
+	tf::Transform map_tree_tf;
+	tf::StampedTransform odom_tree_tf;
+
+	try {
+		map_tree_tf = averageTF(visible_camera_patch_ids);
+	}
+    catch (tf::TransformException &ex) {
+        ROS_ERROR("Visible camera map lookup failed + %s",ex.what());
+		return;
+    }
+
+    try{
+		ros::Time now = ros::Time::now() - ros::Duration(tf_delay_);
+		//listener_->waitForTransform("ZED_left_camera", "odom", 
+        //                      now, );
+
+        listener_->lookupTransform("ZED_left_camera", "odom", 
+                                 now, odom_tree_tf);
+      }
+      catch (tf::TransformException &ex) {
+        ROS_ERROR("odom to ZED_left_camera lookup failed + %s",ex.what());
+		return;
+    }
+
+
+	  map_odom_tf_ = map_tree_tf.inverseTimes(odom_tree_tf);
+	  if (two_d_mode_) {
+		  // remove roll and pitch components and z to 0
+		  double roll, pitch, yaw;
+		  tf::Matrix3x3(map_odom_tf_.getRotation()).getRPY(roll, pitch, yaw);
+		  tf::Quaternion quat;
+		  quat.setRPY(0.0, 0.0, yaw);
+
+		  tf::Vector3 trans = map_odom_tf_.getOrigin();
+		  trans.setZ(0.0);
+
+		  map_odom_tf_.setRotation(quat);
+		  map_odom_tf_.setOrigin(trans);
+	  }
+	  map_odom_tf_set_ = true;
+  }
+
+  // Once we have found the map -> odom, keep publishing it 
+  if (map_odom_tf_set_) {
+	  broadcaster_.sendTransform(tf::StampedTransform(map_odom_tf_, ros::Time::now(), "map", "odom"));
+  }
+  // </patch>
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////

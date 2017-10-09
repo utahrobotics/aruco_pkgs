@@ -42,6 +42,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <camera_calibration_parsers/parse_ini.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
 #include <visualization_msgs/Marker.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
@@ -118,18 +119,19 @@ private:
   /** \brief Process actual image, detect markers and compute poses */
   bool processImage(cv::Mat input_image,cv::Mat output_image);
 
+  // <patch>
+  tf::Transform  averageTF(std::vector<std::string> frame_vec);
+
+  // persistent transform from map to odom
+  bool map_odom_tf_set_;
+  tf::Transform map_odom_tf_;
+
   //Launch file params
-  std::string calib_filename_;                    
-  std::string space_type_;                        
-  float marker_size_;
-  int num_of_markers_;
-  bool roi_allowed_;
-  int  roi_x_;                                      
-  int  roi_y_;                                      
-  int  roi_w_;                                     
-  int  roi_h_;     
+  //
   // Should we show the detections in an OpenCV window (answer: no)
   bool gui_;
+  // Should rotation be constrained to yaw 
+  bool two_d_mode_;
   // List of all markers in array 
   std::vector<int> marker_id_list_;
   // The distance from tag center to tag center
@@ -142,6 +144,18 @@ private:
   float roll_;
   float pitch_;
   float yaw_;
+  float tf_delay_;
+  // </patch>
+  std::string calib_filename_;                    
+  std::string space_type_;                        
+  float marker_size_;
+  int num_of_markers_;
+  bool roi_allowed_;
+  int  roi_x_;                                      
+  int  roi_y_;                                      
+  int  roi_w_;                                     
+  int  roi_h_;     
+
   
   /** \brief Container holding MarkerInfo data about all detected markers */
   std::vector<MarkerInfo> markers_;

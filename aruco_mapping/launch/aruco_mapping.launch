@@ -21,6 +21,7 @@
     <param name="roi_width" type="int" value="1280" /> 
     <param name="roi_height" type="int" value="720" /> 
     <param name="gui" type="bool" value="$(arg gui)" />
+    <param name="two_d_mode" type="bool" value="true" />
 	<!-- Left (85 (ascii U)),  Middle (83 (ascii S)),  Right (82 (ascii R))-->
 	<rosparam param="marker_id_list">[85, 83, 82]</rosparam>
     <param name="tag_offset" type="double" value="0.48"/>
@@ -35,6 +36,14 @@
     <param name="roll" type="double" value="-1.5708"/>
     <param name="pitch" type="double" value="-1.5708"/>
     <param name="yaw" type="double" value="-1.5708"/>
+
+	<!-- How far in the past you look for the transform
+		 Higher value means more lag in updating
+		 Lower value will generate more warnings for failed tf lookups
+		 and will cause it to completely fail if too low
+		 (stay low, but safe)
+	-->
+    <param name="tf_delay" type="double" value="0.1"/>
 
     <!-- Quaternion angle offset -->
 	<!--

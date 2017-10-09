@@ -78,11 +78,10 @@ class ArucoPatchNode(object):
                 rospy.logdebug("Can't lookup odom --> ZED_left_camera")
                 if last_map_odom_tf is not None:
                     self.tf_broadcaster.sendTransform(last_map_odom_tf)
-                #rospy.logdebug("rate remaining: {}".format(rate.remaining()))
                 rate.sleep()
                 continue
 
-            if len(live_camera_tfs) > 0:
+            if len(live_camera_tfs) > 1:
                 # Create 2d list of all positions 
                 # (rows are data from each camera, cols are xyz)
                 positions = [self.ros_msg_to_list(camera_tf.transform.translation) \
@@ -139,7 +138,6 @@ class ArucoPatchNode(object):
             if last_map_odom_tf is not None:
                 self.tf_broadcaster.sendTransform(last_map_odom_tf)
 
-            #rospy.logdebug("rate remaining: {}".format(rate.remaining()))
             rate.sleep()
 
 
