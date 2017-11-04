@@ -25,6 +25,8 @@
 	<!-- Left (85 (ascii U)),  Middle (83 (ascii S)),  Right (82 (ascii R))-->
 	<rosparam param="marker_id_list">[85, 83, 82]</rosparam>
     <param name="tag_offset" type="double" value="0.48"/>
+	<!-- How far we can be from the bin and change the tf -->
+    <param name="predict_range" type="double" value="3.0"/>
 
 	<!-- Collector bin cartesian coordinates -->
     <param name="cartx" type="double" value="0.0"/>
@@ -44,6 +46,7 @@
 		 (stay low, but safe)
 	-->
     <param name="tf_delay" type="double" value="0.1"/>
+
 
     <!-- Quaternion angle offset -->
 	<!--

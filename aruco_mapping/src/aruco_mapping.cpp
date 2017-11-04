@@ -62,23 +62,24 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
   nh->getParam("/aruco_mapping/calibration_file", calib_filename_);
   nh->getParam("/aruco_mapping/marker_size", temp_marker_size); 
   nh->getParam("/aruco_mapping/num_of_markers", num_of_markers_);
-  nh->getParam("/aruco_maping/space_type",space_type_);
-  nh->getParam("/aruco_mapping/roi_allowed",roi_allowed_);
-  nh->getParam("/aruco_mapping/roi_x",roi_x_);
-  nh->getParam("/aruco_mapping/roi_y",roi_y_);
-  nh->getParam("/aruco_mapping/roi_w",roi_w_);
-  nh->getParam("/aruco_mapping/roi_h",roi_h_);
-  nh->getParam("/aruco_mapping/gui",gui_);
-  nh->getParam("/aruco_mapping/two_d_mode",two_d_mode_);
-  nh->getParam("/aruco_mapping/marker_id_list",marker_id_list_);
-  nh->getParam("/aruco_mapping/tag_offset",tag_offset_);
-  nh->getParam("/aruco_mapping/cartx",cartx_);
-  nh->getParam("/aruco_mapping/carty",carty_);
-  nh->getParam("/aruco_mapping/cartz",cartz_);
-  nh->getParam("/aruco_mapping/roll",roll_);
-  nh->getParam("/aruco_mapping/pitch",pitch_);
-  nh->getParam("/aruco_mapping/yaw",yaw_);
-  nh->getParam("/aruco_mapping/tf_delay",tf_delay_);
+  nh->getParam("/aruco_maping/space_type", space_type_);
+  nh->getParam("/aruco_mapping/roi_allowed", roi_allowed_);
+  nh->getParam("/aruco_mapping/roi_x", roi_x_);
+  nh->getParam("/aruco_mapping/roi_y", roi_y_);
+  nh->getParam("/aruco_mapping/roi_w", roi_w_);
+  nh->getParam("/aruco_mapping/roi_h", roi_h_);
+  nh->getParam("/aruco_mapping/gui", gui_);
+  nh->getParam("/aruco_mapping/two_d_mode", two_d_mode_);
+  nh->getParam("/aruco_mapping/marker_id_list", marker_id_list_);
+  nh->getParam("/aruco_mapping/tag_offset", tag_offset_);
+  nh->getParam("/aruco_mapping/predict_range", predict_range_);
+  nh->getParam("/aruco_mapping/cartx", cartx_);
+  nh->getParam("/aruco_mapping/carty", carty_);
+  nh->getParam("/aruco_mapping/cartz", cartz_);
+  nh->getParam("/aruco_mapping/roll", roll_);
+  nh->getParam("/aruco_mapping/pitch", pitch_);
+  nh->getParam("/aruco_mapping/yaw", yaw_);
+  nh->getParam("/aruco_mapping/tf_delay", tf_delay_);
   //nh->getParam("/aruco_mapping/quatx",quatx_);
   //nh->getParam("/aruco_mapping/quaty",quaty_);
   //nh->getParam("/aruco_mapping/quatz",quatz_);
@@ -100,6 +101,7 @@ ArucoMapping::ArucoMapping(ros::NodeHandle *nh) :
     ROS_INFO_STREAM("ROI y-coor: " << roi_x_);
     ROS_INFO_STREAM("ROI width: "  << roi_w_);
     ROS_INFO_STREAM("ROI height: " << roi_h_);      
+    ROS_INFO_STREAM("Predict range: " << predict_range_);      
     ROS_INFO_STREAM("GUI: " << gui_);
 	for(std::vector<int>::size_type i = 0; i != marker_id_list_.size(); i++) {
 	  ROS_INFO_STREAM("#" << i+1 <<  " Marker ID: " << marker_id_list_[i]);
@@ -818,47 +820,58 @@ ArucoMapping::publishTfs(bool map_option)
 
   // TODO: might consider adding cov
 
+  // if at least 1 of the markers is visible
   if (visible_camera_patch_ids.size() > 0) {
-	tf::Transform map_tree_tf;
-	tf::StampedTransform odom_tree_tf;
+	tf::Transform map_tree_tf;  // tf of camera in map tf tree
+	tf::StampedTransform odom_tree_tf; // tf of camera in odom tf tree
+	// we have both transforms (map -> camera, odom -> zed)
+	bool both_tf = true;
 
 	try {
 		map_tree_tf = averageTF(visible_camera_patch_ids);
 	}
     catch (tf::TransformException &ex) {
         ROS_ERROR("Visible camera map lookup failed + %s",ex.what());
-		return;
+		both_tf = false;
     }
 
-    try{
+    try {
 		ros::Time now = ros::Time::now() - ros::Duration(tf_delay_);
-		//listener_->waitForTransform("ZED_left_camera", "odom", 
-        //                      now, );
-
         listener_->lookupTransform("ZED_left_camera", "odom", 
                                  now, odom_tree_tf);
-      }
-      catch (tf::TransformException &ex) {
-        ROS_ERROR("odom to ZED_left_camera lookup failed + %s",ex.what());
-		return;
+    }
+    catch (tf::TransformException &ex) {
+		ROS_ERROR("odom to ZED_left_camera lookup failed + %s",ex.what());
+		both_tf = false;
     }
 
 
-	  map_odom_tf_ = map_tree_tf.inverseTimes(odom_tree_tf);
-	  if (two_d_mode_) {
-		  // remove roll and pitch components and z to 0
-		  double roll, pitch, yaw;
-		  tf::Matrix3x3(map_odom_tf_.getRotation()).getRPY(roll, pitch, yaw);
-		  tf::Quaternion quat;
-		  quat.setRPY(0.0, 0.0, yaw);
+    if (both_tf) {
+	  float cam_x = map_tree_tf.getOrigin().getX();
 
-		  tf::Vector3 trans = map_odom_tf_.getOrigin();
-		  trans.setZ(0.0);
+	  // we don't want to change our tf belief if we are too far away
+	  if (cam_x < predict_range_) {
+	    // Calculate tf of odom in reference to map
+	    map_odom_tf_ = map_tree_tf.inverseTimes(odom_tree_tf);
+	    // remove roll and pitch components and z to 0
+	    double roll, pitch, yaw;
+	    tf::Matrix3x3(map_odom_tf_.getRotation()).getRPY(roll, pitch, yaw);
+	    tf::Quaternion quat;
+	    quat.setRPY(0.0, 0.0, yaw);
 
-		  map_odom_tf_.setRotation(quat);
-		  map_odom_tf_.setOrigin(trans);
+	    tf::Vector3 trans = map_odom_tf_.getOrigin();
+
+	    if (two_d_mode_) {
+	      trans.setZ(0.0);
+	    }
+
+	    //ROS_INFO_STREAM("x = " << cam_x << "  predict_range = " << predict_range_);
+
+	  	map_odom_tf_.setRotation(quat);
+	  	map_odom_tf_.setOrigin(trans);
+	  	map_odom_tf_set_ = true;
 	  }
-	  map_odom_tf_set_ = true;
+	}
   }
 
   // Once we have found the map -> odom, keep publishing it 

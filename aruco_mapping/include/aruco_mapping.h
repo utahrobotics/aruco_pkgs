@@ -38,6 +38,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Standard ROS libraries
 #include <ros/ros.h>
+#include <ros/console.h>
 #include <sensor_msgs/image_encodings.h>
 #include <camera_calibration_parsers/parse_ini.h>
 #include <tf/transform_broadcaster.h>
@@ -145,6 +146,7 @@ private:
   float pitch_;
   float yaw_;
   float tf_delay_;
+  float predict_range_;
   // </patch>
   std::string calib_filename_;                    
   std::string space_type_;                        
